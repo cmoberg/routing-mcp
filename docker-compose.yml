@@ -1,0 +1,32 @@
+services:
+  frr:
+    image: frrouting/frr:10.2
+    hostname: frr-test
+    privileged: true
+    volumes:
+      - frr-run:/run/frr
+      - ./docker/frr/daemons:/etc/frr/daemons:ro
+      - ./docker/frr/frr.conf:/etc/frr/frr.conf:ro
+    healthcheck:
+      test: ["CMD", "test", "-S", "/run/frr/mgmtd_fe.sock"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 8s
+
+  test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    volumes:
+      - frr-run:/run/frr
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - FRR_SOCK=/run/frr/mgmtd_fe.sock
+    depends_on:
+      frr:
+        condition: service_healthy
+
+volumes:
+  frr-run:

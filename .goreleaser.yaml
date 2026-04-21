@@ -1,0 +1,73 @@
+version: 2
+
+project_name: routing-mcp
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: routing-mcp
+    main: ./cmd/routing-mcp
+    binary: routing-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: routing-mcp
+    builds: [routing-mcp]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - docker/frr/daemons
+      - docker/frr/frr.conf
+      - docker-compose.yml
+
+dockers:
+  - image_templates:
+      - "ghcr.io/cmoberg/routing-mcp:{{ .Tag }}-amd64"
+    goarch: amd64
+    dockerfile: docker/Dockerfile.release
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+  - image_templates:
+      - "ghcr.io/cmoberg/routing-mcp:{{ .Tag }}-arm64"
+    goarch: arm64
+    dockerfile: docker/Dockerfile.release
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/cmoberg/routing-mcp:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/cmoberg/routing-mcp:{{ .Tag }}-amd64"
+      - "ghcr.io/cmoberg/routing-mcp:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/cmoberg/routing-mcp:latest"
+    image_templates:
+      - "ghcr.io/cmoberg/routing-mcp:{{ .Tag }}-amd64"
+      - "ghcr.io/cmoberg/routing-mcp:{{ .Tag }}-arm64"
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: cmoberg
+    name: routing-mcp
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

@@ -1,0 +1,6 @@
+FROM golang:1.23-alpine
+RUN apk add --no-cache bash
+WORKDIR /workspace
+COPY go.mod go.sum* ./
+RUN go mod download 2>/dev/null || true
+CMD ["go", "test", "-v", "-tags", "integration", "-timeout", "30s", "./..."]

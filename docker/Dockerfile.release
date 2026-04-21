@@ -1,0 +1,4 @@
+FROM scratch
+COPY routing-mcp /routing-mcp
+ENTRYPOINT ["/routing-mcp"]
+CMD ["--transport", "http", "--port", "3000"]

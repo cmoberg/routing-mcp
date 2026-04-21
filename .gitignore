@@ -1,0 +1,7 @@
+/frr/
+.claude/
+dist/
+/routing-mcp
+*.out
+# Go test binaries (produced by go test -c)
+*.test.bin
