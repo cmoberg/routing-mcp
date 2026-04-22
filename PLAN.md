@@ -4,7 +4,7 @@
 
 ### Container topology
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │ Docker Desktop (Linux VM, x86_64)           │
 │                                             │
@@ -24,7 +24,7 @@ The macOS host cannot directly reach the Unix socket (it lives in the Docker Des
 
 ### Files to create
 
-```
+```text
 routing-mcp/
   docker/
     frr/
@@ -36,7 +36,8 @@ routing-mcp/
 ```
 
 ### docker/frr/daemons
-```
+
+```ini
 zebra=yes
 bgpd=no
 ospfd=no
@@ -61,7 +62,8 @@ staticd=yes
 ```
 
 ### docker/frr/frr.conf
-```
+
+```text
 frr version 10.2
 frr defaults traditional
 hostname frr-test
@@ -71,9 +73,11 @@ service integrated-vtysh-config
 ip route 10.99.0.0/24 Null0
 !
 ```
+
 (The static route gives us something to read back in Step 9.)
 
 ### docker-compose.yml
+
 ```yaml
 services:
   frr:
@@ -110,6 +114,7 @@ volumes:
 ```
 
 ### docker/Dockerfile.test
+
 ```dockerfile
 FROM golang:1.23-alpine
 RUN apk add --no-cache bash
@@ -121,6 +126,7 @@ CMD ["go", "test", "-v", "-tags", "integration", "./..."]
 ```
 
 ### Makefile
+
 ```makefile
 .PHONY: up down test test-unit test-integration shell logs
 
@@ -164,7 +170,7 @@ Integration tests (require FRR socket): `//go:build integration` tag at top of `
 
 ### Dev iteration loop
 
-```
+```bash
 # First time:
 make up          # pulls frrouting/frr:10.2, starts mgmtd (~30s)
 
@@ -192,6 +198,7 @@ make down && make up
 **Decision point**: If `stream_putl()` is used → big-endian. If the struct is written directly with `write()`/`stream_put()` → native/little-endian. Expected: little-endian (Unix socket between local processes).
 
 **Success criteria**:
+
 - The byte order is identified from source, not assumed.
 - A comment in `pkg/frrmgmt/frame.go` cites the file and function name as evidence.
 - A `TestUnitFrameMarkerBytes` test encodes a frame and asserts the exact first 4 bytes match the expected wire encoding (e.g. `[]byte{0x01, 0x23, 0x23, 0x23}` for little-endian native marker version 1).
@@ -202,7 +209,7 @@ make down && make up
 
 **Task**: Initialize Go module, create the package directory tree, add a `go.sum`, confirm the build is clean.
 
-```
+```text
 routing-mcp/
   go.mod                    module routing-mcp, go 1.23
   pkg/
@@ -222,6 +229,7 @@ routing-mcp/
 No external dependencies yet. `encoding/binary`, `net`, `sync`, `context` are all stdlib.
 
 **Success criteria**:
+
 - `go build ./...` exits 0 with no output.
 - `go vet ./...` exits 0.
 - `go test ./...` exits 0 (no tests yet, but no compilation errors).
@@ -233,9 +241,11 @@ No external dependencies yet. `encoding/binary`, `net`, `sync`, `context` are al
 **Task**: Implement read/write of the outer wire frame.
 
 Wire format (two 4-byte fields before payload):
-```
+
+```text
 [marker uint32][len uint32][payload: len bytes]
 ```
+
 - `marker` = `0x23232300 | 1` (version byte 1 = native)
 - `len` = byte count of payload (the message struct + variable data)
 - Byte order determined in Step 0
@@ -252,6 +262,7 @@ func WriteFrame(w io.Writer, payload []byte) error
 ```
 
 `ReadFrame` must:
+
 1. Read 8 bytes.
 2. Validate `marker & 0xFFFFFF00 == 0x23232300`.
 3. Extract version from low byte.
@@ -260,6 +271,7 @@ func WriteFrame(w io.Writer, payload []byte) error
 6. Reject `len > maxFrameSize`.
 
 **Success criteria**:
+
 - `TestUnitFrameRoundTrip`: encode then decode a payload, get identical bytes.
 - `TestUnitFrameMarkerBytes`: asserts exact wire bytes of marker (verifies byte order from Step 0).
 - `TestUnitFrameBadMarker`: `ReadFrame` returns a non-nil error when marker bytes are wrong.
@@ -289,7 +301,7 @@ type MsgHeader struct {
 All fixed structs embed `MsgHeader` as the first field and pad their specific fields to 8 bytes total:
 
 | Struct | Specific fields | Pad |
-|---|---|---|
+| --- | --- | --- |
 | `SessionReqFixed` | `NotifyFormat uint8` | `[7]byte` |
 | `SessionReplyFixed` | `Created uint8` | `[7]byte` |
 | `GetDataFixed` | `ResultType, Flags, Defaults, Datastore uint8` | `[4]byte` |
@@ -305,6 +317,7 @@ All fixed structs embed `MsgHeader` as the first field and pad their specific fi
 | `ErrorFixed` | `Error int16` | `[6]byte` |
 
 **Success criteria**:
+
 - `TestUnitMsgHeaderSize`: `binary.Size(MsgHeader{}) == 24`.
 - `TestUnitAllFixedStructSizes`: for every fixed struct, `binary.Size(T{}) == 32`.
 - `TestUnitConstantValues`: spot-check that Go constants match the C header values (e.g. `CodeGetData == 3`, `FormatJSON == 2`, `EditOpMerge == 2`, `CommitApply == 0`, `DatastoreCandidate == 2`).
@@ -317,11 +330,13 @@ All fixed structs embed `MsgHeader` as the first field and pad their specific fi
 **Task**: Implement helpers for the two variable-data patterns used in PUBLIC messages.
 
 **Pattern A — single NUL-terminated string** (xpath in `GET_DATA`, client name in `SESSION_REQ`):
+
 ```go
 func AppendString(s string) []byte           // s + "\x00"
 ```
 
 **Pattern B — xpath split + secondary data** (`vsplit` pattern in `EDIT`, `NOTIFY`, `EDIT_REPLY`):
+
 ```go
 // Encode: returns vsplit value and combined payload bytes.
 // vsplit = len(xpath)+1, payload = xpath\x00 + data
@@ -332,12 +347,14 @@ func DecodeXpathData(vsplit uint32, payload []byte) (xpath string, data []byte, 
 ```
 
 **Pattern C — NUL-separated string list** (`NOTIFY_SELECT.selectors`):
+
 ```go
 func EncodeNulStrings(strs []string) []byte   // each str + "\x00"
 func DecodeNulStrings(b []byte) []string       // split on "\x00", drop empty trailing
 ```
 
 **Success criteria**:
+
 - `TestUnitEncodeXpathDataRoundTrip`: encode then decode returns identical xpath and data.
 - `TestUnitEncodeXpathDataVsplit`: the returned `vsplit` equals `len(xpath)+1` exactly.
 - `TestUnitEncodeXpathDataEmptyData`: encoding with `nil` data and decoding returns `xpath` and `nil` data.
@@ -371,6 +388,7 @@ Reconnect strategy: 100ms → 200ms → 400ms → ... → 5s cap, with ±10% jit
 **Decision point**: Should `Send` block until the socket is connected, or return an error immediately if disconnected? Decision: return `ErrNotConnected` immediately — the caller (session layer) handles reconnect.
 
 **Success criteria**:
+
 - `TestUnitConnReconnectBackoff`: using a fake clock, verify the retry delays follow the capped exponential sequence.
 - `TestIntegrationConnDial`: `Dial` against the live FRR socket path succeeds within 2s.
 - `TestIntegrationConnFrameRoundTrip`: send a raw payload, receive it back (requires a loopback echo — or validated indirectly via Step 7 session test).
@@ -403,11 +421,13 @@ func (d *Dispatcher) Notifications() <-chan []byte
 ```
 
 The internal read goroutine decodes the `MsgHeader` from each raw payload to get `Code` and `ReqID`, then routes:
+
 - `Code == CodeNotify` → broadcast to notifications channel.
 - Any other code with a matching pending `reqID` → send to that pending channel.
 - Unmatched reply (no pending entry) → log and discard.
 
 **Success criteria**:
+
 - `TestUnitDispatchSingleReply`: register a pending req_id, push a matching frame, receive it on the channel.
 - `TestUnitDispatchTwoInflight`: two simultaneous pending req_ids each receive exactly their own reply.
 - `TestUnitDispatchNotify`: a frame with `CodeNotify` goes to `Notifications()` not to any pending channel.
@@ -436,6 +456,7 @@ func (s *Session) Close(ctx context.Context) error
 ```
 
 Wire encoding for SESSION_REQ (create):
+
 - `MsgHeader.Code = CodeSessionReq`
 - `MsgHeader.ReferID = 0` (create)
 - `MsgHeader.ReqID = <client_id>` (arbitrary uint64, use 1)
@@ -445,6 +466,7 @@ Wire encoding for SESSION_REQ (create):
 On SESSION_REPLY: store `reply.ReferID` as `sessionID`. Verify `reply.Created == 1`.
 
 **Success criteria**:
+
 - `TestIntegrationSessionCreate`: `New` returns a `*Session` with a non-zero `ID()`.
 - `TestIntegrationSessionClose`: `Close` on a valid session returns nil error.
 - `TestIntegrationSessionTwoSessions`: two independent sessions created sequentially both get distinct non-zero IDs.
@@ -509,6 +531,7 @@ func (c *Client) RPC(ctx context.Context, xpath string, input []byte) ([]byte, e
 ```
 
 **Success criteria**:
+
 - `TestIntegrationGetDataRunningConfig`: `GetData("/", DatastoreRunning, FlagConfig)` returns bytes that unmarshal as valid JSON with no error.
 - `TestIntegrationGetDataOperState`: `GetData("/frr-staticd:lib", DatastoreOperational, FlagState)` returns valid JSON containing the `10.99.0.0/24` static route from `frr.conf`.
 - `TestIntegrationGetDataUnknownXpath`: a syntactically invalid xpath returns an error (not a hang).
@@ -526,6 +549,7 @@ func (c *Client) RPC(ctx context.Context, xpath string, input []byte) ([]byte, e
 **Task**: One test that exercises the complete client lifecycle as a realistic sequence, mirroring what the MCP layer will do. Run via `make test-integration`.
 
 Sequence:
+
 1. `Dial` the socket.
 2. `NewDispatcher`.
 3. `New` session named `"routing-mcp-test"`.
@@ -540,6 +564,7 @@ Sequence:
 12. `Close` session.
 
 **Success criteria**:
+
 - `TestIntegrationE2E` passes with `-timeout 30s` and zero test failures.
 - `go test -v` output shows each step as a named sub-test (`t.Run`).
 - The test is idempotent: run twice in a row without `make down`, both pass.
@@ -553,7 +578,7 @@ Sequence:
 Tools:
 
 | Tool name | Client call | Input schema |
-|---|---|---|
+| --- | --- | --- |
 | `get_config` | `GetData(xpath, Running, FlagConfig)` | `{xpath: string}` |
 | `get_state` | `GetData(xpath, Operational, FlagState)` | `{xpath: string}` |
 | `set_config` | `EditAndCommit(xpath, Merge, data)` | `{xpath: string, data: object}` |
@@ -563,10 +588,12 @@ Tools:
 | `run_rpc` | `RPC(xpath, input)` | `{xpath: string, input: object}` |
 
 Resources:
+
 - `frr://yang/{module}` → contents of `frr/yang/{module}.yang` served as text.
 - `frr://yang/index` → list of available YANG modules.
 
 **Success criteria**:
+
 - MCP server starts (`cmd/routing-mcp/main.go`) and the tool list JSON contains all 7 tool names.
 - `get_config` called with xpath `/` returns a non-empty JSON string.
 - `set_config` called with a new static route, followed by `get_config`, shows the route.
@@ -579,7 +606,7 @@ Resources:
 ## Decision Point Tracker
 
 | # | Question | Decision | Rationale |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 0 | Byte order | Verify in `mgmt_msg.c` before writing decoder | Only ~20 lines to check; wrong byte order means silent garbled data |
 | 2 | Max frame size cap | 256 KB | 4× the stated 64 KB max; protects against corrupted length fields |
 | 5 | `Send` when disconnected | Return `ErrNotConnected` immediately | Session layer knows to reconnect; blocking would deadlock callers |

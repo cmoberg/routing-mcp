@@ -46,7 +46,7 @@ routing-mcp --socket /run/frr/mgmtd_fe.sock --transport http --port 3000
 ## MCP tools
 
 | Tool | Description |
-|---|---|
+| --- | --- |
 | `get_config` | Read configuration from the running datastore |
 | `get_state` | Read operational state |
 | `set_config` | Apply a configuration change (edit + commit) |

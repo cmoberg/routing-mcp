@@ -43,7 +43,7 @@ Integration test files use the build tag `//go:build integration` and the `FRR_S
 All protocol implementation decisions derive from these FRR source files:
 
 | File | Purpose |
-|---|---|
+| --- | --- |
 | `frr/lib/mgmt_msg_native.h` | **Primary spec.** All PUBLIC message structs, constants, and encoding rules. The `_Static_assert` lines pin exact struct sizes. |
 | `frr/lib/mgmt_msg.h` | Outer wire frame: `struct mgmt_msg_hdr { uint32_t marker; uint32_t len; }` and the `MGMT_MSG_MARKER_*` constants. |
 | `frr/lib/mgmt_defines.h` | Socket paths (`mgmtd_fe.sock`), max lengths, datastore enum. |
@@ -55,12 +55,15 @@ All protocol implementation decisions derive from these FRR source files:
 ## Wire protocol summary
 
 **Outer frame** (8 bytes before every message):
-```
+
+```text
 [marker uint32][len uint32]
 ```
+
 `marker = 0x23232300 | 1` (version byte 1 = native protocol). `len` = payload byte count. Byte order: verify in `frr/lib/mgmt_msg.c` before assuming — expected to be little-endian (host byte order, Unix socket between local processes).
 
 **Message header** (first 24 bytes of every payload, matches C `struct mgmt_msg_header`):
+
 ```go
 type MsgHeader struct {
     Code    uint16  // MGMT_MSG_CODE_*
@@ -70,9 +73,11 @@ type MsgHeader struct {
     ReqID   uint64  // correlates request → reply
 }
 ```
+
 All fixed message structs are exactly 32 bytes (header + 8 bytes of fields + padding). The C `_Static_assert(sizeof(msg) == offsetof(msg, variable_field))` enforces this.
 
 **Variable data patterns** used in PUBLIC messages:
+
 - Single NUL-terminated string: `xpath + "\x00"` (GET_DATA, SESSION_REQ client_name)
 - xpath split: `xpath\x00 + treeData`, with `VSplit = len(xpath)+1` (EDIT, NOTIFY, EDIT_REPLY)
 - NUL-separated list: `str1\x00str2\x00` (NOTIFY_SELECT selectors)
@@ -83,7 +88,7 @@ All fixed message structs are exactly 32 bytes (header + 8 bytes of fields + pad
 
 ## Go package architecture
 
-```
+```text
 pkg/
   frrmgmt/
     frame.go      ReadFrame / WriteFrame — outer marker+length envelope
@@ -115,6 +120,7 @@ The test FRR container enables `mgmtd`, `zebra`, `staticd`, and `ripd`. Integrat
 ## Key design decisions
 
 See `PLAN.md` for the full rationale. The short version:
+
 - Data format: always JSON (`FormatJSON = 2`) — no libyang dependency
 - Streaming `TREE_DATA` (more=1 fragments): assembled internally before returning to callers
 - MCP notification delivery: polling `get_notifications` tool (MCP has no standard push)
