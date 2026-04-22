@@ -38,6 +38,8 @@ func TestUnitAllFixedStructSizes(t *testing.T) {
 		{"NotifySelectFixed", NotifySelectFixed{}},
 		{"NotifyDataFixed", NotifyDataFixed{}},
 		{"ErrorFixed", ErrorFixed{}},
+		{"RPCFixed", RPCFixed{}},
+		{"RPCReplyFixed", RPCReplyFixed{}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

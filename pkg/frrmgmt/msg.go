@@ -185,3 +185,15 @@ type ErrorFixed struct {
 	Error int16
 	Resv2 [6]byte
 }
+
+type RPCFixed struct {
+	MsgHeader
+	RequestType uint8
+	Resv2       [7]byte
+}
+
+type RPCReplyFixed struct {
+	MsgHeader
+	ResultType uint8
+	Resv2      [7]byte
+}
