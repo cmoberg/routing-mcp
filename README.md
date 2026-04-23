@@ -4,7 +4,7 @@ An MCP (Model Context Protocol) server that exposes [FRRouting](https://frroutin
 
 ## Status
 
-Under active development. See [PLAN.md](PLAN.md) for the implementation roadmap.
+Under active development.
 
 ## Requirements
 
@@ -67,8 +67,6 @@ Only daemons converted to the mgmtd northbound API are accessible:
 
 ## Development
 
-See [PLAN.md](PLAN.md) for the step-by-step implementation plan with testable success criteria.
-
 ```bash
 # Unit tests (no FRR required)
 make test-unit
@@ -89,7 +87,7 @@ git clone https://github.com/FRRouting/frr frr
 ## Background
 
 - [RESEARCH.md](RESEARCH.md) — prior art survey covering existing MCP servers for network management, relevant IETF drafts, and interface options
-- [PLAN.md](PLAN.md) — detailed implementation plan with wire protocol notes
+- [ARCHITECTURE.md](ARCHITECTURE.md) — current design, protocol details, and package layout
 
 ## License
 
