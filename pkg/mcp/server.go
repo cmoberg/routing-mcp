@@ -270,9 +270,13 @@ func (s *Server) handleValidateConfig(ctx context.Context, req mcp.CallToolReque
 	}
 
 	if err := s.client.Lock(ctx, frrmgmt.DatastoreCandidate); err != nil {
-		return mcp.NewToolResultError("lock: " + err.Error()), nil
+		return mcp.NewToolResultError("lock candidate: " + err.Error()), nil
 	}
-	// Always abort + unlock regardless of what happens next.
+	if err := s.client.Lock(ctx, frrmgmt.DatastoreRunning); err != nil {
+		s.client.Unlock(context.Background(), frrmgmt.DatastoreCandidate) //nolint:errcheck
+		return mcp.NewToolResultError("lock running: " + err.Error()), nil
+	}
+	// CommitAbort requires the running lock (same as CommitApply); unlock=true releases both.
 	defer s.client.Commit(context.Background(), frrmgmt.CommitAbort, true) //nolint:errcheck
 
 	if _, err := s.client.Edit(ctx, xpath, frrmgmt.EditOpMerge, []byte(data)); err != nil {
