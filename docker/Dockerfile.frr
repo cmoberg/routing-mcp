@@ -1,0 +1,18 @@
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl gnupg ca-certificates iproute2 tini \
+    && curl -s https://deb.frrouting.org/frr/keys.asc \
+       | gpg --dearmor -o /usr/share/keyrings/frr.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/frr.gpg] \
+       https://deb.frrouting.org/frr noble frr-stable" \
+       > /etc/apt/sources.list.d/frr.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        frr \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/frr/start.sh /start.sh
+RUN chmod +x /start.sh
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/start.sh"]

@@ -5,12 +5,34 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/cmoberg/routing-mcp/pkg/frrmgmt"
 )
+
+// FRR 10.x xpath for the staticd instance in the default VRF.
+const mcpXpathStaticInst = "/frr-routing:routing/control-plane-protocols/" +
+	"control-plane-protocol[type='frr-staticd:staticd'][name='staticd'][vrf='default']/" +
+	"frr-staticd:staticd"
+
+func mcpXpathForRoute(prefix string) string {
+	return fmt.Sprintf(mcpXpathStaticInst+
+		"/route-list[prefix='%s'][src-prefix='::/0'][afi-safi='frr-routing:ipv4-unicast']",
+		prefix)
+}
+
+// mcpBHRouteData returns the JSON for a Null0 (blackhole) route wrapped in the
+// route-list container. EditOpMerge pops one xpath level to staticd, so the
+// data must include route-list key fields as a child of staticd.
+func mcpBHRouteData(prefix string) string {
+	return fmt.Sprintf(
+		`{"route-list":[{"prefix":%q,"src-prefix":"::/0","afi-safi":"frr-routing:ipv4-unicast","path-list":[{"table-id":0,"distance":1,"frr-nexthops":{"nexthop":[{"nh-type":"blackhole","vrf":"default","gateway":"","interface":"(null)"}]}}]}]}`,
+		prefix,
+	)
+}
 
 // sockPathFromEnvMCP returns the mgmtd_fe.sock path from FRR_SOCK env var.
 func sockPathFromEnvMCP(t *testing.T) string {
@@ -65,7 +87,7 @@ func TestIntegrationMCPGetConfig(t *testing.T) {
 	srv, cancel := newIntegrationServer(t)
 	defer cancel()
 
-	result := callTool(t, srv.handleGetConfig, map[string]any{"xpath": "/frr-staticd:lib"})
+	result := callTool(t, srv.handleGetConfig, map[string]any{"xpath": mcpXpathStaticInst})
 	if result.IsError {
 		t.Fatalf("get_config returned error: %s", resultText(t, result))
 	}
@@ -86,15 +108,12 @@ func TestIntegrationMCPSetAndDeleteConfig(t *testing.T) {
 	defer cancel()
 
 	const prefix = "203.0.113.0/24"
-	const xpath = "/frr-staticd:lib" +
-		"/route-list[prefix='203.0.113.0/24'][afi-safi='frr-staticd:ipv4-unicast']" +
-		"/path-list[table-id='0'][distance='1']" +
-		"/frr-nexthops/nexthop[nh-type='blackhole'][vrf='default'][gateway=''][interface='']"
+	routeXpath := mcpXpathForRoute(prefix)
 
 	// Set the route.
 	setResult := callTool(t, srv.handleSetConfig, map[string]any{
-		"xpath": xpath,
-		"data":  `{}`,
+		"xpath": routeXpath,
+		"data":  mcpBHRouteData(prefix),
 	})
 	if setResult.IsError {
 		t.Skipf("set_config: %s (route may already exist or YANG path changed)", resultText(t, setResult))
@@ -102,7 +121,7 @@ func TestIntegrationMCPSetAndDeleteConfig(t *testing.T) {
 	t.Logf("set_config: %s", resultText(t, setResult))
 
 	// Verify it appears in the running datastore.
-	getResult := callTool(t, srv.handleGetConfig, map[string]any{"xpath": "/frr-staticd:lib"})
+	getResult := callTool(t, srv.handleGetConfig, map[string]any{"xpath": mcpXpathStaticInst})
 	if getResult.IsError {
 		t.Fatalf("get_config after set: %s", resultText(t, getResult))
 	}
@@ -111,14 +130,14 @@ func TestIntegrationMCPSetAndDeleteConfig(t *testing.T) {
 	}
 
 	// Delete the route.
-	delResult := callTool(t, srv.handleDeleteConfig, map[string]any{"xpath": xpath})
+	delResult := callTool(t, srv.handleDeleteConfig, map[string]any{"xpath": routeXpath})
 	if delResult.IsError {
 		t.Fatalf("delete_config: %s", resultText(t, delResult))
 	}
 	t.Logf("delete_config: %s", resultText(t, delResult))
 
 	// Verify it is gone.
-	getResult2 := callTool(t, srv.handleGetConfig, map[string]any{"xpath": "/frr-staticd:lib"})
+	getResult2 := callTool(t, srv.handleGetConfig, map[string]any{"xpath": mcpXpathStaticInst})
 	if getResult2.IsError {
 		t.Fatalf("get_config after delete: %s", resultText(t, getResult2))
 	}

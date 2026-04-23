@@ -233,20 +233,40 @@ func (c *Client) Commit(ctx context.Context, action uint8, unlock bool) error {
 	return checkError(reply)
 }
 
-// EditAndCommit performs Lock → Edit → Commit(CommitApply, unlock=true) atomically.
-// Best-effort Unlock is attempted if Edit fails; session close will reap the lock
-// regardless.
+// EditAndCommit applies a config change atomically using EDIT_FLAG_IMPLICIT_COMMIT.
+// mgmtd acquires locks on candidate and running, edits, commits, and releases
+// all locks — no separate Lock/Commit/Unlock calls are needed.
 func (c *Client) EditAndCommit(ctx context.Context, xpath string, op uint8, data []byte) (*EditResult, error) {
-	if err := c.Lock(ctx, DatastoreCandidate); err != nil {
-		return nil, fmt.Errorf("frrmgmt: lock: %w", err)
+	vsplit, varData := EncodeXpathData(xpath, data)
+	req := EditFixed{
+		MsgHeader: MsgHeader{
+			Code:    CodeEdit,
+			ReferID: c.sess.ID(),
+			ReqID:   c.disp.NextReqID(),
+			VSplit:  vsplit,
+		},
+		RequestType: FormatJSON,
+		Flags:       EditFlagImplicitCommit,
+		Datastore:   DatastoreCandidate,
+		Operation:   op,
 	}
-	result, err := c.Edit(ctx, xpath, op, data)
+	reply, err := c.roundtrip(ctx, append(encodeFixed(req), varData...))
 	if err != nil {
-		c.Unlock(ctx, DatastoreCandidate) //nolint:errcheck
-		return nil, fmt.Errorf("frrmgmt: edit: %w", err)
+		return nil, err
 	}
-	if err := c.Commit(ctx, CommitApply, true); err != nil {
-		return nil, fmt.Errorf("frrmgmt: commit: %w", err)
+	if err := checkError(reply); err != nil {
+		return nil, err
+	}
+	var hdr EditReplyFixed
+	binary.Read(bytes.NewReader(reply), binary.LittleEndian, &hdr) //nolint:errcheck
+	result := &EditResult{
+		Changed: hdr.Changed != 0,
+		Created: hdr.Created != 0,
+	}
+	if len(reply) > 32 {
+		if strs := DecodeNulStrings(reply[32:]); len(strs) > 0 {
+			result.XPath = strs[0]
+		}
 	}
 	return result, nil
 }

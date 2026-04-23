@@ -1,6 +1,8 @@
 services:
   frr:
-    image: frrouting/frr:10.2
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frr
     hostname: frr-test
     privileged: true
     volumes:

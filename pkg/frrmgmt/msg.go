@@ -58,6 +58,11 @@ const (
 	GetDataFlagExact  uint8 = 0x04
 )
 
+// Edit flags.
+const (
+	EditFlagImplicitCommit uint8 = 0x02 // atomically commit after edit; server manages all locks
+)
+
 // GetData with-defaults modes (RFC 6243).
 const (
 	DefaultsExplicit  uint8 = 0
