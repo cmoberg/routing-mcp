@@ -16,6 +16,18 @@ services:
       retries: 15
       start_period: 8s
 
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    ports:
+      - "3000:3000"
+    volumes:
+      - frr-run:/run/frr
+    depends_on:
+      frr:
+        condition: service_healthy
+
   test:
     build:
       context: .

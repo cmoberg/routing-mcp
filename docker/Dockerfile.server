@@ -1,0 +1,12 @@
+FROM golang:1.25-alpine AS builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /routing-mcp ./cmd/routing-mcp
+
+FROM alpine:3.20
+COPY --from=builder /routing-mcp /routing-mcp
+COPY frr/yang /yang
+ENTRYPOINT ["/routing-mcp"]
+CMD ["--transport", "http", "--port", "3000", "--yang-dir", "/yang"]

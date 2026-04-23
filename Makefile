@@ -1,4 +1,4 @@
-.PHONY: up down test test-unit test-integration shell logs run-test build
+.PHONY: up down test test-unit test-integration shell logs run-test build serve
 
 # Start FRR container in the background
 up:
@@ -30,6 +30,11 @@ logs:
 # Run a single test by name: make run-test T=TestIntegrationSessionCreate
 run-test: up
 	docker compose run --rm test go test -v -tags integration -run $(T) ./...
+
+# Start the MCP HTTP/SSE server on http://localhost:3000
+serve: up
+	docker compose up -d server
+	@echo "MCP server: http://localhost:3000/sse"
 
 # Build the binary locally (requires CGO_ENABLED=0 for a static binary)
 build:
